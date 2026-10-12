@@ -1,0 +1,29 @@
+{
+  "name": "Charana Seva Walk Tracker",
+  "short_name": "Charana Seva",
+  "description": "CHM Walkathon live tracker. Partnered with CHM.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff6e6",
+  "theme_color": "#9c1f1f",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
