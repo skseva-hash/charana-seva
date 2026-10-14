@@ -84,6 +84,18 @@ textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px
 
 .acts{display:flex;gap:6px;margin-top:6px}
 .danger{border-color:var(--bad);color:var(--bad)}
+.acts{flex-wrap:wrap}
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 6px;text-align:center}
+.sg b{display:block;font:700 19px ui-monospace,Menlo,monospace;color:#fff;text-shadow:0 0 10px var(--cy)}
+.sg span{font-size:11px;color:var(--mute)}
+#qrOut{background:#fff;padding:12px;display:inline-block;border-radius:8px;margin-top:10px}
+#qrOut:empty{display:none}
+.tl{margin:12px 0 4px;font-size:13px;color:var(--cy);font-weight:700;letter-spacing:.04em}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.btns .go{margin-top:0;padding:12px 8px;font-size:14px}
+@media print{body::before,header,.tabs,.sup,.foot,button,#gate,#map,#msg,.top,#pReg,#pTools,.hint{display:none!important}
+body{background:#fff!important;color:#000!important}.card{background:#fff!important;color:#000!important;border:1px solid #999;box-shadow:none}
+.km,.stats b,b{color:#000!important;text-shadow:none!important}.w small{color:#444!important}}
 </style>
 </head>
 <body>
@@ -144,20 +156,77 @@ textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px
 
   <div id="pTools" hidden>
     <section class="card">
+      <h2>Event summary</h2>
+      <div class="sg" id="sumGrid"></div>
+    </section>
+
+    <section class="card">
+      <h2>Registration and Excel</h2>
+      <p class="hint" style="margin-top:0">Every form registration is added to the linked Google Sheet by Google straight away. Connect it in the Registered tab, then use these tools.</p>
+      <div class="btns">
+        <button class="go" id="xlsx">Download Excel (.xlsx)</button>
+        <button class="go" id="regCsv">Registered list (CSV)</button>
+        <button class="go" id="cpMail">Copy all emails</button>
+        <button class="go" id="cpPhone">Copy all phone numbers</button>
+      </div>
+      <p class="hint">The Excel file has two sheets: Registered (with each person's walk status) and Walk results.</p>
+      <div class="tl">Live Google Sheet</div>
+      <input type="text" id="sheetUrl" placeholder="Paste the sheet's normal link (docs.google.com/spreadsheets/d/&hellip;/edit)">
+      <div class="btns"><button class="go" id="sheetSave">Save link</button><button class="go" id="sheetOpen">Open live sheet</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Who needs attention</h2>
+      <div id="attn"></div>
+      <div class="btns"><button class="go" id="cpNs">Copy names not signed in</button><button class="go" id="cpStale">Copy names not seen lately</button></div>
+    </section>
+
+    <section class="card">
       <h2>Announcement</h2>
       <p class="hint" style="margin-top:0">Shows at the top of the walk page for everyone. Leave empty and post to clear it.</p>
+      <div class="acts" style="margin:0 0 8px">
+        <button class="sm pre" data-t="Walk starts in 10 minutes. Please gather at the start line.">Starting soon</button>
+        <button class="sm pre" data-t="Water stop ahead. Stay hydrated.">Water stop</button>
+        <button class="sm pre" data-t="Please keep to the footpath and walk safely.">Stay safe</button>
+        <button class="sm pre" data-t="Walk finished. Please scan the event QR to sign out. Thank you for your seva!">Finished</button>
+      </div>
       <textarea id="annTxt" maxlength="200" placeholder="e.g. Water stop at the halfway point"></textarea>
       <button class="go" id="annPost">Post announcement</button>
     </section>
+
     <section class="card">
-      <h2>Results</h2>
-      <p class="hint" style="margin-top:0">Download every walker's time, distance, pace and heart rate.</p>
-      <button class="go" id="exp">Download results (CSV)</button>
+      <h2>Results and printing</h2>
+      <div class="btns">
+        <button class="go" id="exp">Results (CSV)</button>
+        <button class="go" id="prn">Print leaderboard</button>
+      </div>
     </section>
+
     <section class="card">
-      <h2>Reset</h2>
-      <p class="hint" style="margin-top:0">Deletes all walkers and results. Use after testing, before the event.</p>
+      <h2>Share and messages</h2>
+      <div class="btns">
+        <button class="go" id="cpLink">Copy walk page link</button>
+        <button class="go" id="cpMsg">Copy reminder message</button>
+      </div>
+      <div class="tl">QR code maker</div>
+      <input type="text" id="qrTxt" placeholder="Link or text, e.g. the registration form link">
+      <div class="btns"><button class="go" id="qrMake">Make QR code</button><button class="go" id="qrDl" hidden>Download PNG</button></div>
+      <div id="qrOut"></div>
+      <p class="hint">Don't use this for the walk's sign-in QR. Sign-in only accepts the one QR code set for the event.</p>
+    </section>
+
+    <section class="card">
+      <h2>Clean-up and backup</h2>
+      <div class="btns">
+        <button class="go" id="finAll">Finish everyone still walking</button>
+        <button class="go" id="rmZero">Remove 0 km entries</button>
+        <button class="go" id="bkp">Download backup (JSON)</button>
+        <button class="go" id="rst">Restore from backup</button>
+      </div>
+      <input type="file" id="rstFile" accept=".json,application/json" hidden>
+      <div class="tl">Danger</div>
       <button class="go stop" id="reset">Clear all walks</button>
+      <p class="hint">Download a backup first. Clearing deletes all walkers and results.</p>
     </section>
   </div>
 </div>
@@ -201,7 +270,7 @@ async function unlock(){
   sessionStorage.setItem('cs_admin','1');show();
 }
 function show(){
-  $('gate').hidden=true;$('dash').hidden=false;load();clearInterval(timer);timer=setInterval(load,10000);initMap();
+  $('gate').hidden=true;$('dash').hidden=false;load();clearInterval(timer);timer=setInterval(load,10000);initMap();loadRegs();setInterval(loadRegs,60000);
   api('/announcement').then(a=>{$('annTxt').value=a||''}).catch(()=>{});
 }
 $('unlock').onclick=unlock;$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
@@ -235,6 +304,7 @@ function draw(){
   $('list').querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this walker?'))return;try{await api('/walks/'+b.dataset.d,'DELETE');load()}catch(e){say(e.message)}});
   drawMap(walking);
   if(regs)drawRegs();
+  tools();
 }
 
 /* ---- map ---- */
@@ -267,7 +337,7 @@ async function loadRegs(){
   const u=localStorage.getItem('cs_csv')||window.CHM_FORM_CSV_URL||'';
   $('regSetup').open=!u;
   if(!u){$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';return}
-  try{const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;regs=csv(await r.text());drawRegs()}
+  try{const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;regs=csv(await r.text());drawRegs();tools()}
   catch(e){$('regHead').textContent='Could not read the sheet. Check the link is published as CSV.';$('regSetup').open=true}
 }
 function drawRegs(){
@@ -289,14 +359,76 @@ $('csvSave').onclick=()=>{const u=$('csvUrl').value.trim();
   localStorage.setItem('cs_csv',u);loadRegs()};
 
 /* ---- tools ---- */
+const copy=async t=>{try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}say('Copied.')};
+const dl=(name,data,type)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click()};
+const toCsv=rows=>rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\n');
+const walkList=()=>Object.entries(walks||{}).filter(([k,w])=>w&&w.name&&w.start).map(([k,w])=>({...w,id:k}));
+const stMap=()=>{const st={};walkList().forEach(w=>{const k=w.name.trim().toLowerCase();if(st[k]!=='walking')st[k]=w.done?'finished':'walking'});return st};
+const regInfo=()=>{if(!regs||!regs.length)return null;const head=regs[0];return {head,rows:regs.slice(1),ni:Math.max(0,head.findIndex(h=>/name/i.test(h)))}};
+function resultRows(){const rows=[['Name','Status','Distance km','Heart rate','Start','End','Time','Pace min/km']];
+  walkList().forEach(w=>{const el=(w.end||Date.now())-w.start;rows.push([w.name,w.done?'finished':'walking',(+w.km||0).toFixed(2),w.hr||'',new Date(w.start).toLocaleString(),w.end?new Date(w.end).toLocaleString():'',fmtT(el),pace(el,w.km)])});return rows}
+let nsNames=[],staleNames=[];
+function tools(){
+  const w=walkList(),fin=w.filter(x=>x.done),on=w.filter(x=>!x.done),ri=regInfo();
+  const km=w.reduce((a,x)=>a+(+x.km||0),0);
+  const avg=fin.length?fin.reduce((a,x)=>a+(x.end-x.start),0)/fin.length:0;
+  const long=w.reduce((m,x)=>Math.max(m,+x.km||0),0);
+  const best=fin.filter(x=>x.km>0.5).sort((a,b)=>(a.end-a.start)/a.km-(b.end-b.start)/b.km)[0];
+  const cells=[[ri?ri.rows.length:'--','registered'],[w.length,'signed in'],[on.length,'walking'],[fin.length,'finished'],[km.toFixed(1),'total km'],[avg?fmtT(avg):'--','avg finish time'],[long.toFixed(2),'longest km'],[best?pace(best.end-best.start,best.km):'--','fastest pace']];
+  $('sumGrid').innerHTML=cells.map(c=>'<div><b>'+c[0]+'</b><span>'+c[1]+'</span></div>').join('');
+  staleNames=on.filter(x=>Date.now()-(x.upd||x.start)>10*60000).map(x=>x.name);
+  const names=new Set(w.map(x=>x.name.trim().toLowerCase()));
+  nsNames=ri?ri.rows.filter(r=>(r[ri.ni]||'').trim()&&!names.has(r[ri.ni].trim().toLowerCase())).map(r=>r[ri.ni].trim()):[];
+  $('attn').innerHTML='<p class="hint" style="margin-top:0"><b>'+staleNames.length+'</b> walking but not seen for 10+ minutes'+(staleNames.length?': '+esc(staleNames.join(', ')):'')+'</p>'+
+    '<p class="hint"><b>'+(ri?nsNames.length:'--')+'</b> registered but not signed in'+(ri?'':' (connect the registration form first)')+'</p>';
+  const sl=localStorage.getItem('cs_sheet')||'';if(sl&&document.activeElement!==$('sheetUrl'))$('sheetUrl').value=sl;
+}
+function loadScript(src,test){return new Promise((ok,no)=>{if(test())return ok();const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)})}
+$('xlsx').onclick=async()=>{
+  try{await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>window.XLSX)}catch(e){say('Excel tool could not load. Check your connection.');return}
+  const wb=XLSX.utils.book_new(),ri=regInfo(),st=stMap();
+  if(ri)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([ri.head.concat(['Walk status'])].concat(ri.rows.map(r=>r.concat([st[(r[ri.ni]||'').trim().toLowerCase()]||'not started'])))),'Registered');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resultRows()),'Walk results');
+  XLSX.writeFile(wb,'charana-seva-'+new Date().toISOString().slice(0,10)+'.xlsx');
+  if(!ri)say('Downloaded walk results only. Connect the registration form to add the registered list.');
+};
+$('regCsv').onclick=()=>{if(!regInfo()){say('Connect the registration form first.');return}dl('registered.csv',toCsv(regs),'text/csv')};
+function colCopy(re,label,sep){const ri=regInfo();if(!ri){say('Connect the registration form first.');return}
+  const ci=ri.head.findIndex(h=>re.test(h));if(ci<0){say('No '+label+' column found in the form.');return}
+  const v=ri.rows.map(r=>(r[ci]||'').trim()).filter(Boolean);if(!v.length){say('No '+label+' entries yet.');return}copy(v.join(sep))}
+$('cpMail').onclick=()=>colCopy(/e-?mail/i,'email','; ');
+$('cpPhone').onclick=()=>colCopy(/phone|mobile|contact/i,'phone','\n');
+$('sheetSave').onclick=()=>{const u=$('sheetUrl').value.trim();if(!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(u)){say('Paste the Google Sheet link.');return}localStorage.setItem('cs_sheet',u);say('Sheet link saved.')};
+$('sheetOpen').onclick=()=>{const u=localStorage.getItem('cs_sheet');if(!u){say('Save the sheet link first.');return}window.open(u,'_blank','noopener')};
+$('cpNs').onclick=()=>nsNames.length?copy(nsNames.join('\n')):say('Nobody to list.');
+$('cpStale').onclick=()=>staleNames.length?copy(staleNames.join('\n')):say('Nobody to list.');
+document.querySelectorAll('.pre').forEach(b=>b.onclick=()=>{$('annTxt').value=b.dataset.t});
 $('annPost').onclick=async()=>{const t=$('annTxt').value.trim();
   try{if(t)await api('/announcement','PUT',t);else await api('/announcement','DELETE');say(t?'Announcement posted.':'Announcement cleared.')}catch(e){say(e.message)}};
-$('exp').onclick=()=>{
-  const rows=[['Name','Status','Distance km','Heart rate','Start','End','Time','Pace min/km']];
-  Object.values(walks).filter(w=>w&&w.name).forEach(w=>{const el=(w.end||Date.now())-w.start;
-    rows.push([w.name,w.done?'finished':'walking',(+w.km||0).toFixed(2),w.hr||'',new Date(w.start).toLocaleString(),w.end?new Date(w.end).toLocaleString():'',fmtT(el),pace(el,w.km)])});
-  const t=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download='charana-seva-results.csv';a.click()};
+$('exp').onclick=()=>dl('charana-seva-results.csv',toCsv(resultRows()),'text/csv');
+$('prn').onclick=()=>{document.querySelector('#atabs button[data-p="pWalk"]').click();setTimeout(()=>window.print(),150)};
+$('cpLink').onclick=()=>copy(new URL('index.html',location.href).href);
+$('cpMsg').onclick=()=>copy('Charana Seva, Temple to Temple Walk (CHM Walkathon 2026)\nSaturday 24 October 2026, 6:30 AM start. 12.5 km, about 2.5 to 3 hours. Free event.\nScan the event QR code at the start to sign in, and again at the finish to sign out.\nFollow the walk live: '+new URL('index.html',location.href).href);
+$('qrMake').onclick=async()=>{const t=$('qrTxt').value.trim();if(!t){say('Type or paste a link first.');return}
+  try{await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',()=>window.QRCode)}catch(e){say('QR tool could not load.');return}
+  $('qrOut').innerHTML='';new QRCode($('qrOut'),{text:t,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});$('qrDl').hidden=false};
+$('qrDl').onclick=()=>{const c=$('qrOut').querySelector('canvas');if(!c)return;
+  const o=document.createElement('canvas');o.width=o.height=c.width+48;const x=o.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,o.width,o.height);x.drawImage(c,24,24);
+  const a=document.createElement('a');a.href=o.toDataURL('image/png');a.download='qr-code.png';a.click()};
+$('finAll').onclick=async()=>{const on=walkList().filter(x=>!x.done);if(!on.length){say('Nobody is still walking.');return}
+  if(!confirm('Finish '+on.length+' walker(s) who are still walking?'))return;
+  const b={},t=Date.now();on.forEach(x=>{b[x.id+'/done']=true;b[x.id+'/end']=t});
+  try{await api('/walks','PATCH',b);say('Finished '+on.length+' walker(s).');load()}catch(e){say(e.message)}};
+$('rmZero').onclick=async()=>{const z=walkList().filter(x=>(+x.km||0)<0.01);if(!z.length){say('No 0 km entries.');return}
+  if(!confirm('Remove '+z.length+' entry(ies) with 0 km?'))return;
+  const b={};z.forEach(x=>{b[x.id]=null});
+  try{await api('/walks','PATCH',b);say('Removed '+z.length+'.');load()}catch(e){say(e.message)}};
+$('bkp').onclick=()=>dl('charana-seva-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(walks||{},null,1),'application/json');
+$('rst').onclick=()=>$('rstFile').click();
+$('rstFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{const o=JSON.parse(await f.text());if(!o||typeof o!=='object'||Array.isArray(o))throw 0;
+    if(!confirm('Replace ALL current walks with the '+Object.keys(o).length+' in this backup?'))return;
+    await api('/walks','PUT',o);say('Backup restored.');load()}catch(err){say('That file is not a valid backup.')}};
 $('reset').onclick=async()=>{if(!confirm('Delete ALL walkers and results? This cannot be undone.'))return;
   try{await api('/walks','DELETE');say('All walks cleared.');load()}catch(e){say(e.message)}};
 
