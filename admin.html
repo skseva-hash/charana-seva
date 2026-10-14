@@ -144,11 +144,19 @@ body{background:#fff!important;color:#000!important}.card{background:#fff!import
       <p class="hint" id="regHead" style="margin-top:0">Not connected yet.</p>
       <input type="text" id="q" placeholder="Search name, phone, email&hellip;" style="margin-top:10px">
       <details id="regSetup" style="margin-top:12px">
-        <summary>Connect the registration form</summary>
-        <p>1. Open your Google Form, tap Responses, then Link to Sheets.<br>2. In the sheet, tap File, Share, Publish to web.<br>3. Choose the responses sheet and CSV, tap Publish, and copy the link.<br>4. Paste it here.</p>
+        <summary>Connect your registration form</summary>
+        <div class="tl">Microsoft Forms</div>
+        <p>1. Open your form in Microsoft Forms and tap Responses.<br>2. Tap Open results in Excel, then download the file.<br>3. Upload it here. Upload the new file again to refresh the list.</p>
+        <button class="go" id="regPick">Upload Excel or CSV file</button>
+        <input type="file" id="regFile" accept=".xlsx,.xls,.csv,text/csv" hidden>
+        <p class="hint" id="impAt"></p>
+        <button class="sm" id="regClear" hidden>Clear imported list</button>
+        <p class="hint">The uploaded list is kept only in this browser on this device. It is not sent to the database.</p>
+        <div class="tl">Google Forms</div>
+        <p>Link the form to a Google Sheet, tap File, Share, Publish to web, choose CSV, and paste the link here.</p>
         <input type="text" id="csvUrl" placeholder="https://docs.google.com/spreadsheets/d/e/&hellip;/pub?output=csv">
         <button class="go" id="csvSave">Save link</button>
-        <p class="hint">Anyone who has this link can read the sheet, so keep it private.</p>
+        <p class="hint">Anyone who has a published link can read the sheet, so keep it private.</p>
       </details>
     </section>
     <div id="regList"></div>
@@ -162,7 +170,7 @@ body{background:#fff!important;color:#000!important}.card{background:#fff!import
 
     <section class="card">
       <h2>Registration and Excel</h2>
-      <p class="hint" style="margin-top:0">Every form registration is added to the linked Google Sheet by Google straight away. Connect it in the Registered tab, then use these tools.</p>
+      <p class="hint" style="margin-top:0">Connect your registration list in the Registered tab (a Microsoft Forms Excel file or a Google Sheet link), then use these tools.</p>
       <div class="btns">
         <button class="go" id="xlsx">Download Excel (.xlsx)</button>
         <button class="go" id="regCsv">Registered list (CSV)</button>
@@ -170,8 +178,8 @@ body{background:#fff!important;color:#000!important}.card{background:#fff!import
         <button class="go" id="cpPhone">Copy all phone numbers</button>
       </div>
       <p class="hint">The Excel file has two sheets: Registered (with each person's walk status) and Walk results.</p>
-      <div class="tl">Live Google Sheet</div>
-      <input type="text" id="sheetUrl" placeholder="Paste the sheet's normal link (docs.google.com/spreadsheets/d/&hellip;/edit)">
+      <div class="tl">Live registration sheet</div>
+      <input type="text" id="sheetUrl" placeholder="Paste the link to your Excel or Google Sheet">
       <div class="btns"><button class="go" id="sheetSave">Save link</button><button class="go" id="sheetOpen">Open live sheet</button></div>
     </section>
 
@@ -326,6 +334,7 @@ function drawMap(walking){
 }
 
 /* ---- registered (Google Form responses, published as CSV) ---- */
+function nameIdx(head,rows){let best=0,bs=-1;head.forEach((h,i)=>{if(!/name/i.test(h))return;const sc=rows.filter(r=>{const v=(r[i]||'').trim().toLowerCase();return v&&v!=='anonymous'}).length;if(sc>bs){bs=sc;best=i}});return best}
 function csv(t){const rows=[];let r=[],f='',q=false;
   for(let i=0;i<t.length;i++){const c=t[i];
     if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
@@ -333,17 +342,38 @@ function csv(t){const rows=[];let r=[],f='',q=false;
     else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;r.push(f);rows.push(r);r=[];f=''}else f+=c}
   if(f||r.length){r.push(f);rows.push(r)}
   return rows.filter(x=>x.some(v=>v.trim()))}
+const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function impInfo(){const st=localStorage.getItem('cs_regs'),at=+localStorage.getItem('cs_regs_at');
+  $('regClear').hidden=!st;
+  $('impAt').textContent=st?'Uploaded list: '+(JSON.parse(st).length-1)+' registrations, saved '+new Date(at).toLocaleString():''}
 async function loadRegs(){
   const u=localStorage.getItem('cs_csv')||window.CHM_FORM_CSV_URL||'';
-  $('regSetup').open=!u;
-  if(!u){$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';return}
-  try{const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;regs=csv(await r.text());drawRegs();tools()}
-  catch(e){$('regHead').textContent='Could not read the sheet. Check the link is published as CSV.';$('regSetup').open=true}
+  impInfo();
+  if(u){
+    try{const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;regs=csv(await r.text());drawRegs();tools();return}
+    catch(e){$('regHead').textContent='Could not read the Google Sheet. Check the link is published as CSV.';$('regSetup').open=true;return}
+  }
+  const st=localStorage.getItem('cs_regs');
+  if(st){try{regs=JSON.parse(st);$('regSetup').open=false;drawRegs();tools();return}catch(e){}}
+  $('regSetup').open=true;$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';
 }
+$('regPick').onclick=()=>$('regFile').click();
+$('regFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{let rows;
+    if(/\.csv$/i.test(f.name))rows=csv(await f.text());
+    else{await loadScript(XLSX_URL,()=>window.XLSX);const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}).map(r=>r.map(v=>String(v==null?'':v))).filter(r=>r.some(v=>v.trim()))}
+    if(rows.length<2)throw 0;
+    localStorage.setItem('cs_regs',JSON.stringify(rows));localStorage.setItem('cs_regs_at',String(Date.now()));
+    regs=rows;impInfo();drawRegs();tools();say('Loaded '+(rows.length-1)+' registrations.')
+  }catch(err){say('Could not read that file. Use the Excel or CSV file from Microsoft Forms.')}};
+$('regClear').onclick=()=>{if(!confirm('Remove the uploaded registration list from this device?'))return;
+  localStorage.removeItem('cs_regs');localStorage.removeItem('cs_regs_at');
+  if(!localStorage.getItem('cs_csv')&&!window.CHM_FORM_CSV_URL){regs=null;$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';tools()}impInfo()};
 function drawRegs(){
   if(!regs||!regs.length)return;
   const head=regs[0],rows=regs.slice(1),q=$('q').value.toLowerCase().trim();
-  const ni=Math.max(0,head.findIndex(h=>/name/i.test(h)));
+  const ni=nameIdx(head,rows);
   const st={};Object.values(walks).forEach(w=>{if(w&&w.name){const k=w.name.trim().toLowerCase();if(st[k]!=='walking')st[k]=w.done?'finished':'walking'}});
   const key=r=>(r[ni]||'').trim().toLowerCase();
   const cnt={walking:0,finished:0};rows.forEach(r=>{const s=st[key(r)];if(s)cnt[s]++});
@@ -364,7 +394,7 @@ const dl=(name,data,type)=>{const a=document.createElement('a');a.href=URL.creat
 const toCsv=rows=>rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\n');
 const walkList=()=>Object.entries(walks||{}).filter(([k,w])=>w&&w.name&&w.start).map(([k,w])=>({...w,id:k}));
 const stMap=()=>{const st={};walkList().forEach(w=>{const k=w.name.trim().toLowerCase();if(st[k]!=='walking')st[k]=w.done?'finished':'walking'});return st};
-const regInfo=()=>{if(!regs||!regs.length)return null;const head=regs[0];return {head,rows:regs.slice(1),ni:Math.max(0,head.findIndex(h=>/name/i.test(h)))}};
+const regInfo=()=>{if(!regs||!regs.length)return null;const head=regs[0];return {head,rows:regs.slice(1),ni:nameIdx(head,regs.slice(1))}};
 function resultRows(){const rows=[['Name','Status','Distance km','Heart rate','Start','End','Time','Pace min/km']];
   walkList().forEach(w=>{const el=(w.end||Date.now())-w.start;rows.push([w.name,w.done?'finished':'walking',(+w.km||0).toFixed(2),w.hr||'',new Date(w.start).toLocaleString(),w.end?new Date(w.end).toLocaleString():'',fmtT(el),pace(el,w.km)])});return rows}
 let nsNames=[],staleNames=[];
@@ -380,12 +410,12 @@ function tools(){
   const names=new Set(w.map(x=>x.name.trim().toLowerCase()));
   nsNames=ri?ri.rows.filter(r=>(r[ri.ni]||'').trim()&&!names.has(r[ri.ni].trim().toLowerCase())).map(r=>r[ri.ni].trim()):[];
   $('attn').innerHTML='<p class="hint" style="margin-top:0"><b>'+staleNames.length+'</b> walking but not seen for 10+ minutes'+(staleNames.length?': '+esc(staleNames.join(', ')):'')+'</p>'+
-    '<p class="hint"><b>'+(ri?nsNames.length:'--')+'</b> registered but not signed in'+(ri?'':' (connect the registration form first)')+'</p>';
+    '<p class="hint"><b>'+(ri?nsNames.length:'--')+'</b> registered but not signed in'+(ri?'':' (connect your registration list first)')+'</p>';
   const sl=localStorage.getItem('cs_sheet')||'';if(sl&&document.activeElement!==$('sheetUrl'))$('sheetUrl').value=sl;
 }
 function loadScript(src,test){return new Promise((ok,no)=>{if(test())return ok();const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)})}
 $('xlsx').onclick=async()=>{
-  try{await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>window.XLSX)}catch(e){say('Excel tool could not load. Check your connection.');return}
+  try{await loadScript(XLSX_URL,()=>window.XLSX)}catch(e){say('Excel tool could not load. Check your connection.');return}
   const wb=XLSX.utils.book_new(),ri=regInfo(),st=stMap();
   if(ri)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([ri.head.concat(['Walk status'])].concat(ri.rows.map(r=>r.concat([st[(r[ri.ni]||'').trim().toLowerCase()]||'not started'])))),'Registered');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resultRows()),'Walk results');
@@ -398,7 +428,7 @@ function colCopy(re,label,sep){const ri=regInfo();if(!ri){say('Connect the regis
   const v=ri.rows.map(r=>(r[ci]||'').trim()).filter(Boolean);if(!v.length){say('No '+label+' entries yet.');return}copy(v.join(sep))}
 $('cpMail').onclick=()=>colCopy(/e-?mail/i,'email','; ');
 $('cpPhone').onclick=()=>colCopy(/phone|mobile|contact/i,'phone','\n');
-$('sheetSave').onclick=()=>{const u=$('sheetUrl').value.trim();if(!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(u)){say('Paste the Google Sheet link.');return}localStorage.setItem('cs_sheet',u);say('Sheet link saved.')};
+$('sheetSave').onclick=()=>{const u=$('sheetUrl').value.trim();if(!/^https:\/\/(docs\.google\.com|[\w.-]+\.sharepoint\.com|onedrive\.live\.com|1drv\.ms|[\w.-]*office\.com|[\w.-]*officeapps\.live\.com)\//.test(u)){say('Paste the link to your Excel or Google Sheet.');return}localStorage.setItem('cs_sheet',u);say('Sheet link saved.')};
 $('sheetOpen').onclick=()=>{const u=localStorage.getItem('cs_sheet');if(!u){say('Save the sheet link first.');return}window.open(u,'_blank','noopener')};
 $('cpNs').onclick=()=>nsNames.length?copy(nsNames.join('\n')):say('Nobody to list.');
 $('cpStale').onclick=()=>staleNames.length?copy(staleNames.join('\n')):say('Nobody to list.');
