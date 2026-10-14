@@ -105,6 +105,7 @@ textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px
     <input type="text" id="name" placeholder="Your name" autocomplete="name" maxlength="40">
     <button class="go" id="btnIn">Scan QR to sign in</button>
     <p class="hint">Type your name, then scan the Charana Seva walk QR code at the start. Scan it again at the finish to sign out. This is the only way to sign in or out.</p>
+    <a id="regLink" class="go" href="#" target="_blank" rel="noopener" style="display:none;text-align:center;text-decoration:none">Not registered yet? Register here</a>
   </div>
   <div id="inn" hidden>
     <div class="stats">
@@ -262,6 +263,7 @@ async function load(){
   try{walks=(await api('/walks'))||{}}catch(e){$('list').innerHTML='<p class="hint" style="margin:0">Leaderboard unavailable: '+esc(e.message)+'</p>';return}
   draw();
   api('/announcement').then(a=>{const e=$('ann');e.hidden=!a;if(a)e.textContent='\u{1F4E2} '+a}).catch(()=>{});
+  api('/formUrl').then(u=>{const a=$('regLink');if(u&&/^https:\/\//.test(u)){a.href=u;a.style.display='block'}else a.style.display='none'}).catch(()=>{});
 }
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));tab=b.dataset.t;draw()});

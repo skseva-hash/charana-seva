@@ -140,18 +140,34 @@ body{background:#fff!important;color:#000!important}.card{background:#fff!import
 
   <div id="pReg" hidden>
     <section class="card">
+      <h2>Registration form link</h2>
+      <p class="hint" style="margin-top:0">Paste the plain link to your Microsoft Form. It adds a Register button to the walk page.</p>
+      <input type="text" id="formUrl" placeholder="https://forms.office.com/r/...">
+      <div class="btns">
+        <button class="go" id="formSave">Save form link</button>
+        <button class="go" id="formOpen">Open form</button>
+        <button class="go" id="formQr">Make QR code</button>
+        <button class="go" id="formCopy">Copy link</button>
+      </div>
+      <p class="hint">Microsoft keeps form answers private, so a form link on its own can't show who registered. To see the people here, connect the responses in the next box.</p>
+    </section>
+    <section class="card">
       <h2>Registered walkers</h2>
       <p class="hint" id="regHead" style="margin-top:0">Not connected yet.</p>
       <input type="text" id="q" placeholder="Search name, phone, email&hellip;" style="margin-top:10px">
       <details id="regSetup" style="margin-top:12px">
         <summary>Connect your registration form</summary>
         <div class="tl">Microsoft Forms</div>
-        <p>1. Open your form in Microsoft Forms and tap Responses.<br>2. Tap Open results in Excel, then download the file.<br>3. Upload it here. Upload the new file again to refresh the list.</p>
+        <p>1. In Microsoft Forms, open your form, tap Responses, then Open results in Excel.<br>2. In Excel, tap Share, choose "Anyone with the link can view", and copy the link.<br>3. Paste it here.</p>
+        <input type="text" id="msUrl" placeholder="Paste your Microsoft Excel link">
+        <button class="go" id="msSave">Connect link</button>
+        <p class="hint" id="msNote"></p>
+        <p>If the link doesn't work, download the Excel file and upload it instead:</p>
         <button class="go" id="regPick">Upload Excel or CSV file</button>
         <input type="file" id="regFile" accept=".xlsx,.xls,.csv,text/csv" hidden>
         <p class="hint" id="impAt"></p>
-        <button class="sm" id="regClear" hidden>Clear imported list</button>
-        <p class="hint">The uploaded list is kept only in this browser on this device. It is not sent to the database.</p>
+        <button class="sm" id="regClear" hidden>Disconnect and clear list</button>
+        <p class="hint">The list is kept only in this browser on this device. It is not sent to the database.</p>
         <div class="tl">Google Forms</div>
         <p>Link the form to a Google Sheet, tap File, Share, Publish to web, choose CSV, and paste the link here.</p>
         <input type="text" id="csvUrl" placeholder="https://docs.google.com/spreadsheets/d/e/&hellip;/pub?output=csv">
@@ -278,7 +294,7 @@ async function unlock(){
   sessionStorage.setItem('cs_admin','1');show();
 }
 function show(){
-  $('gate').hidden=true;$('dash').hidden=false;load();clearInterval(timer);timer=setInterval(load,10000);initMap();loadRegs();setInterval(loadRegs,60000);
+  $('gate').hidden=true;$('dash').hidden=false;load();clearInterval(timer);timer=setInterval(load,10000);initMap();loadRegs();setInterval(loadRegs,60000);loadForm();
   api('/announcement').then(a=>{$('annTxt').value=a||''}).catch(()=>{});
 }
 $('unlock').onclick=unlock;$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
@@ -343,32 +359,51 @@ function csv(t){const rows=[];let r=[],f='',q=false;
   if(f||r.length){r.push(f);rows.push(r)}
   return rows.filter(x=>x.some(v=>v.trim()))}
 const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-function impInfo(){const st=localStorage.getItem('cs_regs'),at=+localStorage.getItem('cs_regs_at');
-  $('regClear').hidden=!st;
-  $('impAt').textContent=st?'Uploaded list: '+(JSON.parse(st).length-1)+' registrations, saved '+new Date(at).toLocaleString():''}
+let msWarned=false;
+async function xlsxRows(buf){await loadScript(XLSX_URL,()=>window.XLSX);const wb=XLSX.read(buf,{type:'array'});
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}).map(r=>r.map(v=>String(v==null?'':v))).filter(r=>r.some(v=>v.trim()))}
+const b64u=t=>btoa(t).replace(/=+$/,'').replace(/\//g,'_').replace(/\+/g,'-');
+async function msFetch(link){
+  const tries=['https://api.onedrive.com/v1.0/shares/u!'+b64u(link)+'/root/content',link+(link.includes('?')?'&':'?')+'download=1'];
+  for(const u of tries){try{const r=await fetch(u);if(!r.ok)continue;const b=await r.arrayBuffer(),h=new Uint8Array(b.slice(0,2));
+    if(h[0]===0x50&&h[1]===0x4B)return await xlsxRows(b)}catch(e){}}
+  return null}
+function saveRegs(rows){localStorage.setItem('cs_regs',JSON.stringify(rows));localStorage.setItem('cs_regs_at',String(Date.now()))}
+function impInfo(){const st=localStorage.getItem('cs_regs'),at=+localStorage.getItem('cs_regs_at'),ms=localStorage.getItem('cs_ms');
+  $('regClear').hidden=!(st||ms);
+  $('impAt').textContent=st?'Saved list: '+(JSON.parse(st).length-1)+' registrations, updated '+new Date(at).toLocaleString():'';
+  if(ms&&document.activeElement!==$('msUrl'))$('msUrl').value=ms}
 async function loadRegs(){
-  const u=localStorage.getItem('cs_csv')||window.CHM_FORM_CSV_URL||'';
+  const ms=localStorage.getItem('cs_ms'),u=localStorage.getItem('cs_csv')||window.CHM_FORM_CSV_URL||'';
   impInfo();
-  if(u){
+  if(ms){
+    const rows=await msFetch(ms);
+    if(rows&&rows.length>1){saveRegs(rows);regs=rows;impInfo();drawRegs();tools();$('msNote').textContent='Connected. Refreshes every minute.';return}
+    $('msNote').textContent='Microsoft would not let the app read the link just now. Showing the last saved list.';
+    if(!msWarned){$('regSetup').open=true;msWarned=true}
+  }else if(u){
     try{const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;regs=csv(await r.text());drawRegs();tools();return}
     catch(e){$('regHead').textContent='Could not read the Google Sheet. Check the link is published as CSV.';$('regSetup').open=true;return}
   }
   const st=localStorage.getItem('cs_regs');
-  if(st){try{regs=JSON.parse(st);$('regSetup').open=false;drawRegs();tools();return}catch(e){}}
+  if(st){try{regs=JSON.parse(st);drawRegs();tools();return}catch(e){}}
   $('regSetup').open=true;$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';
 }
+$('msSave').onclick=async()=>{const u=$('msUrl').value.trim(),n=$('msNote');
+  if(/^https:\/\/forms\.(office|microsoft)\.com\//.test(u)){n.textContent='That is the form link. Save it in Registration form link above. To see responses, paste the Excel file link here.';return}
+  if(!/^https:\/\/(1drv\.ms|onedrive\.live\.com|[\w.-]+\.sharepoint\.com|[\w.-]*office\.com|[\w.-]*officeapps\.live\.com)\//.test(u)){n.textContent='Paste the Microsoft Excel link.';return}
+  n.textContent='Checking the link...';
+  const rows=await msFetch(u);
+  if(rows&&rows.length>1){localStorage.setItem('cs_ms',u);saveRegs(rows);regs=rows;impInfo();drawRegs();tools();n.textContent='Connected. '+(rows.length-1)+' registrations found.';say('Connected.')}
+  else n.textContent='Microsoft would not let the app read that link. Check it is set to "Anyone with the link can view", or upload the Excel file below instead.'};
 $('regPick').onclick=()=>$('regFile').click();
 $('regFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{let rows;
-    if(/\.csv$/i.test(f.name))rows=csv(await f.text());
-    else{await loadScript(XLSX_URL,()=>window.XLSX);const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
-      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}).map(r=>r.map(v=>String(v==null?'':v))).filter(r=>r.some(v=>v.trim()))}
+  try{const rows=/\.csv$/i.test(f.name)?csv(await f.text()):await xlsxRows(await f.arrayBuffer());
     if(rows.length<2)throw 0;
-    localStorage.setItem('cs_regs',JSON.stringify(rows));localStorage.setItem('cs_regs_at',String(Date.now()));
-    regs=rows;impInfo();drawRegs();tools();say('Loaded '+(rows.length-1)+' registrations.')
+    saveRegs(rows);regs=rows;impInfo();drawRegs();tools();say('Loaded '+(rows.length-1)+' registrations.')
   }catch(err){say('Could not read that file. Use the Excel or CSV file from Microsoft Forms.')}};
-$('regClear').onclick=()=>{if(!confirm('Remove the uploaded registration list from this device?'))return;
-  localStorage.removeItem('cs_regs');localStorage.removeItem('cs_regs_at');
+$('regClear').onclick=()=>{if(!confirm('Disconnect and remove the saved registration list from this device?'))return;
+  ['cs_regs','cs_regs_at','cs_ms'].forEach(k=>localStorage.removeItem(k));$('msUrl').value='';$('msNote').textContent='';
   if(!localStorage.getItem('cs_csv')&&!window.CHM_FORM_CSV_URL){regs=null;$('regList').innerHTML='';$('regHead').textContent='Not connected yet.';tools()}impInfo()};
 function drawRegs(){
   if(!regs||!regs.length)return;
@@ -429,7 +464,7 @@ function colCopy(re,label,sep){const ri=regInfo();if(!ri){say('Connect the regis
 $('cpMail').onclick=()=>colCopy(/e-?mail/i,'email','; ');
 $('cpPhone').onclick=()=>colCopy(/phone|mobile|contact/i,'phone','\n');
 $('sheetSave').onclick=()=>{const u=$('sheetUrl').value.trim();if(!/^https:\/\/(docs\.google\.com|[\w.-]+\.sharepoint\.com|onedrive\.live\.com|1drv\.ms|[\w.-]*office\.com|[\w.-]*officeapps\.live\.com)\//.test(u)){say('Paste the link to your Excel or Google Sheet.');return}localStorage.setItem('cs_sheet',u);say('Sheet link saved.')};
-$('sheetOpen').onclick=()=>{const u=localStorage.getItem('cs_sheet');if(!u){say('Save the sheet link first.');return}window.open(u,'_blank','noopener')};
+$('sheetOpen').onclick=()=>{const u=localStorage.getItem('cs_sheet')||localStorage.getItem('cs_ms');if(!u){say('Save the sheet link first.');return}window.open(u,'_blank','noopener')};
 $('cpNs').onclick=()=>nsNames.length?copy(nsNames.join('\n')):say('Nobody to list.');
 $('cpStale').onclick=()=>staleNames.length?copy(staleNames.join('\n')):say('Nobody to list.');
 document.querySelectorAll('.pre').forEach(b=>b.onclick=()=>{$('annTxt').value=b.dataset.t});
@@ -461,6 +496,18 @@ $('rstFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!
     await api('/walks','PUT',o);say('Backup restored.');load()}catch(err){say('That file is not a valid backup.')}};
 $('reset').onclick=async()=>{if(!confirm('Delete ALL walkers and results? This cannot be undone.'))return;
   try{await api('/walks','DELETE');say('All walks cleared.');load()}catch(e){say(e.message)}};
+
+/* ---- registration form link ---- */
+let formUrl='';
+const okForm=u=>/^https:\/\/(forms\.office\.com|forms\.microsoft\.com|forms\.cloud\.microsoft|forms\.gle|docs\.google\.com\/forms)\//.test(u);
+function loadForm(){api('/formUrl').then(u=>{formUrl=u||'';if(document.activeElement!==$('formUrl'))$('formUrl').value=formUrl}).catch(()=>{})}
+$('formSave').onclick=async()=>{const u=$('formUrl').value.trim();
+  if(!u){try{await api('/formUrl','DELETE');formUrl='';say('Form link removed.')}catch(e){say(e.message)}return}
+  if(!okForm(u)){say('Paste the plain link to your Microsoft Form.');return}
+  try{await api('/formUrl','PUT',u);formUrl=u;say('Saved. The walk page now has a Register button.')}catch(e){say(e.message)}};
+$('formOpen').onclick=()=>{if(!formUrl){say('Save the form link first.');return}window.open(formUrl,'_blank','noopener')};
+$('formCopy').onclick=()=>{if(!formUrl){say('Save the form link first.');return}copy(formUrl)};
+$('formQr').onclick=()=>{if(!formUrl){say('Save the form link first.');return}$('qrTxt').value=formUrl;document.querySelector('#atabs button[data-p="pTools"]').click();$('qrMake').click()};
 
 if(sessionStorage.getItem('cs_admin'))show();
 })();
